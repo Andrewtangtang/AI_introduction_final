@@ -1,0 +1,101 @@
+\section{Experiments}
+\label{sec:experiments}
+
+This section describes the detailed experimental setup, configuration parameters, and runtime environment for evaluating LLM-RL-Tuner. All experiments were conducted on a desktop workstation equipped with an NVIDIA GTX 1080 Ti (11 GB VRAM) and 16 GB RAM, running Ubuntu 22.04 LTS, Python 3.10, and PyTorch 2.x. The reinforcement-learning backbone was implemented with Stable-Baselines3, and the LLM interface was powered by Claude 4.5.
+
+\subsection{Environment Design and Extension}
+\label{subsec:env_design}
+
+We implemented and extended three open-source game environments---Arkanoid, Pingpong, and Proly---to fully comply with the OpenAI Gymnasium API. Each environment was modified to expose additional state information and metadata that the LLM could analyze for reasoning and parameter generation.
+
+\subsubsection{Arkanoid}
+
+\begin{itemize}
+    \item \textbf{Observation Space:} $[x_{\text{ball}}, y_{\text{ball}}, V_x, V_y, x_{\text{paddle}}]$, where $V_x, V_y$ denote ball velocity components.
+
+    \item \textbf{Action Space:} 3 discrete actions --- move left, move right, stay.
+
+    \item \textbf{Adjustable Variables:} Ball velocity initialization range, paddle width, bounce angle multiplier.
+
+    \item \textbf{Reward Function Parameters:} +1 for hitting bricks, $-$1 for missing, +5 for clearing a level.
+\end{itemize}
+
+\subsubsection{Pingpong}
+
+\begin{itemize}
+    \item \textbf{Observation Space:} Positions and velocities of both paddles and the ball $[x_{\text{ball}}, y_{\text{ball}}, V_x, V_y, x_{\text{player}}, x_{\text{opponent}}]$
+
+    \item \textbf{Action Space:} up, down, idle.
+
+    \item \textbf{Tunable Variables:} Opponent reaction delay, paddle acceleration, speed decay factor.
+
+    \item \textbf{Reward Components:} Positive reward proportional to rally length; large positive reward for scoring; negative for conceding points.
+\end{itemize}
+
+\subsubsection{Proly}
+
+A physics-based control game combining motion control and timing.
+
+\begin{itemize}
+    \item \textbf{Observation Space:} continuous vector of body-joint angles and velocity magnitudes.
+
+    \item \textbf{Tunable Variables:} actuator torque limits, damping coefficients, and target-angle penalties.
+\end{itemize}
+
+These environments were extended to log all intermediate state variables into a unified schema, making them easily consumable by the LLM for reasoning.
+
+\subsection{Parameter Optimization Pipeline}
+\label{subsec:pipeline}
+
+The training process follows three progressive experiments:
+
+\noindent \textbf{1. Reward Algorithm Optimization}
+\begin{itemize}
+    \item Q-Learning parameters fixed; LLM designs alternative reward functions.
+    \item Compare cumulative rewards, average completion time, and reward-curve smoothness.
+\end{itemize}
+
+\noindent \textbf{2. Q-Learning Parameter Refinement}
+\begin{itemize}
+    \item Fixed reward formula; allow the LLM to modify:
+    \begin{itemize}
+        \item Learning rate (with decay schedule)
+        \item Discount factor ($\gamma$)
+        \item Epsilon decay rate and minimum $\epsilon$
+        \item Episode length limit
+    \end{itemize}
+    \item The LLM iteratively evaluates logs and generates refined parameter sets.
+\end{itemize}
+
+\noindent \textbf{3. DQN Dynamic Adjustment}
+\begin{itemize}
+    \item Introduce a Deep Q-Network where the LLM can intervene during training.
+    \item The LLM observes metrics such as loss, reward, and gradient variance to dynamically adjust:
+    \begin{itemize}
+        \item Learning rate (phase-wise decay)
+        \item Batch size
+        \item Target-update frequency
+        \item Reward-scaling factor
+    \end{itemize}
+    \item Adjustments occur at predefined checkpoints (every 100 episodes).
+\end{itemize}
+
+\subsection{Training Procedure}
+\label{subsec:training}
+
+Each configuration runs for 500--1000 episodes depending on environment complexity. After each batch of episodes, a summarized report (mean reward, standard deviation, convergence steps) is passed back to the LLM, which proposes new configurations through natural-language reasoning. All experiments were repeated across five random seeds for statistical consistency. Training metrics---including episode reward curves, convergence time, and stability index---were logged using TensorBoard.
+
+\subsection{Expected Results and Analysis}
+\label{subsec:results}
+
+We expect that:
+
+\begin{itemize}
+    \item LLM-generated reward algorithms will yield smoother and more stable learning curves than handcrafted ones.
+
+    \item LLM-optimized Q-Learning parameters will accelerate convergence by reducing redundant exploration.
+
+    \item In DQN experiments, dynamic intervention will minimize overfitting and improve adaptability across different game states.
+\end{itemize}
+
+Together, these results will validate that LLM-guided reasoning can bridge environment semantics and RL optimization, achieving faster convergence and higher final rewards than fixed-parameter baselines.

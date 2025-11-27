@@ -1,0 +1,116 @@
+\section{Method}
+\label{sec:method}
+
+This section describes the overall architecture and experimental methodology of LLM-RL-Tuner, an LLM-assisted reinforcement learning framework designed to enhance agent performance through reasoning-based hyperparameter and reward optimization.
+
+Our approach consists of three key stages---Reward Algorithm Optimization, Parameter Refinement, and Model Architecture Generation---each progressively expanding the LLM's level of control and reasoning depth.
+
+\subsection{System Overview}
+\label{subsec:overview}
+
+The overall workflow integrates three core modules:
+
+\begin{enumerate}
+    \item \textbf{Gymnasium-Compatible Environments} -- We selected three open-source environments: Arkanoid, Pingpong, and Proly, each adapted to follow the Gymnasium API specification. The adaptation ensures standardized interfaces for reset(), step(), and the registration of action\_space and observation\_space.
+
+    \item \textbf{LLM Reasoning Core} -- A Claude 4.5 model serves as the reasoning agent. It receives structured metadata about each environment, including the action and observation spaces, and outputs reward functions, hyperparameter proposals, or model architectures depending on the experimental stage.
+
+    \item \textbf{RL Training Engine} -- Implemented with PyTorch and Stable-Baselines3, this module executes Q-Learning and DQN algorithms. It logs key metrics such as episode reward, convergence time, and success rate, which are fed back to the LLM for iterative reasoning.
+\end{enumerate}
+
+The system operates in a closed-loop cycle:
+
+\begin{center}
+Environment $\to$ Training $\to$ Metric Logging $\to$ LLM Feedback $\to$ Updated Configuration $\to$ Retraining
+\end{center}
+
+This design allows the LLM to iteratively refine both reward shaping and training parameters based on observed performance.
+
+\subsection{Interface Flow and Design}
+\label{subsec:interface}
+
+To support modular reasoning and dynamic optimization, LLM-RL-Tuner defines a structured interface flow:
+
+\begin{enumerate}
+    \item \textbf{Gymnasium Environment Interface:} Provides standardized access to action\_space and observation\_space, enabling semantic understanding by the LLM.
+
+    \item \textbf{Custom Reward Function Interface:} Allows the LLM to generate Python-formatted reward expressions based on structured JSON inputs.
+
+    \item \textbf{Training Metrics Interface:} Logs performance indicators such as reward, convergence time, and episode length, which are fed back to the LLM.
+
+    \item \textbf{Hyperparameter Interface:} Enables the LLM to refine learning rate, discount factor, epsilon decay, and other parameters based on training feedback.
+
+    \item \textbf{DQN Architecture Interface:} Allows the LLM to propose neural network configurations tailored to specific environments.
+\end{enumerate}
+
+\subsection{Stage 1: Reward Algorithm Optimization}
+\label{subsec:stage1}
+
+In the first stage, we hold all Q-Learning parameters constant and allow the LLM to propose modifications to the reward calculation. Each environment implements a reward interface of the form:
+
+\begin{equation}
+r_t = f(\text{action}_t, \text{observation}_t)
+\end{equation}
+
+where the action and observation at each timestep are serialized into a structured JSON message passed to the LLM. The model analyzes these variables and returns a Python-formatted reward expression emphasizing desired behaviors (e.g., maximizing ball deflection angles in Pingpong or minimizing brick misses in Arkanoid).
+
+After training with each generated reward function, we compare:
+\begin{itemize}
+    \item Total episode rewards,
+    \item Time to task completion, and
+    \item Reward curve stability.
+\end{itemize}
+
+This stage evaluates the LLM's capacity to design meaningful reward structures aligned with environment dynamics.
+
+\subsection{Stage 2: Hyperparameter Refinement}
+\label{subsec:stage2}
+
+In the second stage, we fix the best reward formulation from Stage 1 and allow the LLM to optimize the agent's training parameters. The following Q-Learning hyperparameters are targeted for tuning:
+
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{@{}p{2cm}p{2.5cm}p{1.8cm}@{}}
+    \toprule
+    \textbf{Parameter} & \textbf{Description} & \textbf{Range} \\
+    \midrule
+    Learning rate ($\alpha$) & Step size in update rule & [1e-5 -- 1e-2] \\
+    Discount factor ($\gamma$) & Future reward weight & [0.8 -- 0.99] \\
+    Epsilon decay & Exploration schedule & [0.90 -- 0.999] \\
+    Replay buffer size & Memory length & [1e4 -- 1e6] \\
+    \bottomrule
+  \end{tabular}
+  \caption{Q-Learning hyperparameters.}
+  \label{tab:hyperparams}
+\end{table}
+
+For DQN experiments, the LLM also adjusts:
+\begin{itemize}
+    \item Target network update interval,
+    \item Batch size, and
+    \item Gradient clipping threshold.
+\end{itemize}
+
+Each training run produces summary statistics---mean reward, variance, and average episode length---which are fed back to Claude 4.5. The model reasons over the results and generates refined parameter sets in subsequent iterations. This loop continues until convergence or until no significant improvement is observed.
+
+\subsection{Stage 3: Model Architecture Generation}
+\label{subsec:stage3}
+
+The third stage explores whether an LLM can autonomously design neural architectures tailored to specific environments. Here, the LLM is given a textual summary of the observation dimensionality, action count, and reward distribution, then asked to propose a DQN architecture specifying:
+
+\begin{itemize}
+    \item Number of hidden layers
+    \item Units per layer
+    \item Activation functions
+    \item Optimizer type and learning schedule
+\end{itemize}
+
+The generated model description is output in JSON format and validated through a procedure to ensure it conforms to the parameters defined in the interface.
+
+We compare its performance against a baseline DQN (two-layer MLP, 256 hidden units, ReLU activation). Evaluation focuses on convergence time and stability under identical random seeds. A successful outcome is defined as equal or higher mean reward achieved in fewer episodes.
+
+\subsection{Expected Innovation and Feasibility}
+\label{subsec:innovation}
+
+The proposed framework is \textbf{technically feasible} due to full Gymnasium compatibility and modular PyTorch integration. Its \textbf{innovation} lies in enabling a language model to reason over structured environment metadata and iteratively improve both reward design and learning configuration. By embedding semantic reasoning into the RL loop, LLM-RL-Tuner bridges human interpretability and autonomous optimization---an advancement toward more adaptive and generalizable reinforcement learning systems.
