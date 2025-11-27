@@ -1,0 +1,17 @@
+graph LR
+    A[Environment<br/>LunarLander-v3] --> B[Extract Info<br/>Action Space,<br/>Source Code]
+    B --> C[LLM Agent<br/>GPT-4o]
+    C --> D[Select Algorithm<br/>PPO/DQN/etc.]
+    C --> E[Design Reward<br/>Python Code]
+    D --> F[Train Agent<br/>Stable-Baselines3]
+    E --> F
+    F --> G[AI Sampler<br/>Optimize Parameters]
+    G --> F
+
+    style A fill:#e1f5ff,stroke:#01579b,stroke-width:3px,font-size:18px
+    style B fill:#fff4e1,stroke:#e65100,stroke-width:3px,font-size:18px
+    style C fill:#fff4e1,stroke:#e65100,stroke-width:3px,font-size:18px
+    style D fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,font-size:18px
+    style E fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,font-size:18px
+    style F fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,font-size:18px
+    style G fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,font-size:18px

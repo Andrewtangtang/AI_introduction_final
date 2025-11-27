@@ -1,0 +1,18 @@
+graph LR
+    A[Start:<br/>Environment &<br/>Task Description] --> B[Stage 1:<br/>LLM Selects<br/>Algorithm]
+    B --> C[Stage 2:<br/>LLM Designs<br/>Reward Function]
+    C --> D[Stage 3:<br/>AI Sampler Optimizes<br/>Hyperparameters]
+    D --> E[Train RL Agent<br/>250K timesteps]
+    E --> F{More Trials?<br/>10 total}
+    F -->|Yes| D
+    F -->|No| G[Best Model<br/>Saved]
+    G --> H[End]
+
+    style A fill:#e1f5ff,stroke:#01579b,stroke-width:3px,font-size:18px
+    style B fill:#fff4e1,stroke:#e65100,stroke-width:3px,font-size:18px
+    style C fill:#fff4e1,stroke:#e65100,stroke-width:3px,font-size:18px
+    style D fill:#fff4e1,stroke:#e65100,stroke-width:3px,font-size:18px
+    style E fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,font-size:18px
+    style F fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,font-size:18px
+    style G fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,font-size:18px
+    style H fill:#e1f5ff,stroke:#01579b,stroke-width:3px,font-size:18px

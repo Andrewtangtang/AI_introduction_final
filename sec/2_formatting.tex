@@ -1,116 +1,118 @@
 \section{Method}
 \label{sec:method}
 
-This section describes the overall architecture and experimental methodology of LLM-RL-Tuner, an LLM-assisted reinforcement learning framework designed to enhance agent performance through reasoning-based hyperparameter and reward optimization.
+This section describes the overall architecture and experimental methodology of \blue{LLM-RL-Tuner}, an LLM-assisted reinforcement learning framework designed to enhance agent performance through reasoning-based algorithm selection, reward design, and hyperparameter optimization.
 
-Our approach consists of three key stages---Reward Algorithm Optimization, Parameter Refinement, and Model Architecture Generation---each progressively expanding the LLM's level of control and reasoning depth.
+\blue{Our approach implements a sequential three-stage pipeline: (1) Semantic Algorithm Selection, where the LLM analyzes the environment structure to choose an appropriate RL algorithm; (2) Evolutionary Reward Function Design, where the LLM generates executable Python code to modify the environment's reward calculation; and (3) Hyperparameter Optimization, where an AI-powered sampler leverages LLM reasoning to suggest optimal training parameters based on trial history and training feedback, given the fixed algorithm and reward function. This sequential design addresses the interdependencies between these stages while maintaining computational efficiency.}
 
 \subsection{System Overview}
 \label{subsec:overview}
 
-The overall workflow integrates three core modules:
+\blue{The overall workflow integrates four core components:}
 
 \begin{enumerate}
-    \item \textbf{Gymnasium-Compatible Environments} -- We selected three open-source environments: Arkanoid, Pingpong, and Proly, each adapted to follow the Gymnasium API specification. The adaptation ensures standardized interfaces for reset(), step(), and the registration of action\_space and observation\_space.
+    \item \blue{\textbf{Gymnasium-Compatible Environment Wrapper:} We implement an \texttt{AgentModifiable} wrapper that extends the standard Gymnasium \texttt{Wrapper} class. This wrapper provides an \texttt{env\_info()} method that extracts comprehensive environment metadata using Python's \texttt{inspect.getsource()} to retrieve the actual source code of the \texttt{step} and \texttt{reset} methods. It also enables dynamic modification of the \texttt{step} method at runtime through \texttt{modify\_wrap\_step()}, which executes LLM-generated Python code using \texttt{exec()} and binds the new function using \texttt{types.MethodType}. This design allows reward function modification without altering the original environment source code.}
 
-    \item \textbf{LLM Reasoning Core} -- A Claude 4.5 model serves as the reasoning agent. It receives structured metadata about each environment, including the action and observation spaces, and outputs reward functions, hyperparameter proposals, or model architectures depending on the experimental stage.
+    \item \blue{\textbf{LLM Reasoning Agent:} We leverage Google's Agent Development Kit (ADK) to construct an intelligent agent powered by a Large Language Model (GPT-4o via OpenRouter's API). The agent is initialized with a system instruction defining its role as a supervisor for RL training, with access to two specialized tools: \texttt{\_modify\_env\_step} and \texttt{\_select\_algorithm}. The agent communicates through an asynchronous session managed by \texttt{InMemoryRunner}, which handles the event stream from the LLM and automatically executes tool calls when the agent decides to invoke them.}
 
-    \item \textbf{RL Training Engine} -- Implemented with PyTorch and Stable-Baselines3, this module executes Q-Learning and DQN algorithms. It logs key metrics such as episode reward, convergence time, and success rate, which are fed back to the LLM for iterative reasoning.
+    \item \blue{\textbf{RL Training Engine:} Implemented with Stable-Baselines3, this module executes the selected algorithm using vectorized environments created via \texttt{make\_vec\_env()} for parallel training efficiency. The framework supports five algorithms: A2C, DQN, PPO, SAC, and TD3. Training is monitored through \texttt{EvalCallback}, which periodically evaluates the agent on a separate evaluation environment and tracks the best mean reward achieved.}
+
+    \item \blue{\textbf{Hyperparameter Optimization Framework:} We integrate Optuna for automated hyperparameter search. The framework defines a search space for policy gradient algorithms. Each trial executes a complete training run (250,000 timesteps) with trial-suggested hyperparameters and returns the best mean reward from evaluation. \blue{The framework employs an AI-powered sampler that leverages LLM reasoning to suggest hyperparameters based on trial history and training feedback, similar to the approach in AgentHPO. This AI sampler analyzes previous trial outcomes and intelligently guides the hyperparameter search process.}}
 \end{enumerate}
 
-The system operates in a closed-loop cycle:
+\blue{The system operates in a sequential pipeline: Environment Analysis $\to$ Algorithm Selection $\to$ Reward Design $\to$ Hyperparameter Optimization (Multiple Trials) $\to$ Best Configuration. This sequential design ensures that algorithm selection and reward design decisions are made before hyperparameter optimization begins, allowing the AI sampler to focus on finding optimal parameters for a fixed algorithm-reward combination by reasoning about trial outcomes and training metrics.}
 
-\begin{center}
-Environment $\to$ Training $\to$ Metric Logging $\to$ LLM Feedback $\to$ Updated Configuration $\to$ Retraining
-\end{center}
-
-This design allows the LLM to iteratively refine both reward shaping and training parameters based on observed performance.
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/system_flowchart.png}
+  \caption{\blue{Sequential three-stage workflow of LLM-RL-Tuner: (1) Algorithm Selection, (2) Reward Design, and (3) Hyperparameter Optimization with AI Sampler.}}
+  \label{fig:workflow}
+\end{figure*}
 
 \subsection{Interface Flow and Design}
 \label{subsec:interface}
 
-To support modular reasoning and dynamic optimization, LLM-RL-Tuner defines a structured interface flow:
+\blue{To support modular reasoning and dynamic optimization, LLM-RL-Tuner defines a structured interface flow:}
 
 \begin{enumerate}
-    \item \textbf{Gymnasium Environment Interface:} Provides standardized access to action\_space and observation\_space, enabling semantic understanding by the LLM.
+    \item \blue{\textbf{Environment Metadata Interface:} The \texttt{AgentModifiable} wrapper's \texttt{env\_info()} method extracts environment information including action space, observation space, specification metadata, and the source code of the \texttt{step} and \texttt{reset} methods via \texttt{inspect.getsource()}. This code-level access enables the LLM to understand the actual implementation logic.}
 
-    \item \textbf{Custom Reward Function Interface:} Allows the LLM to generate Python-formatted reward expressions based on structured JSON inputs.
+    \item \blue{\textbf{Dynamic Reward Function Interface:} The LLM generates Python code strings defining a new \texttt{step} function. This code is passed to \texttt{\_modify\_env\_step}, which stores it in \texttt{self.step\_code}. When environments are created during training, the code is applied through \texttt{AgentModifiable(env, step\_code=self.step\_code)}, which executes it using \texttt{exec()} and binds the function using \texttt{types.MethodType}.}
 
-    \item \textbf{Training Metrics Interface:} Logs performance indicators such as reward, convergence time, and episode length, which are fed back to the LLM.
+    \item \blue{\textbf{Algorithm Selection Interface:} The agent receives a natural language prompt listing available algorithms. The LLM reasons about algorithm suitability and selects through the \texttt{\_select\_algorithm} tool, which validates the choice against the predefined dictionary and sets \texttt{self.algo} to the corresponding algorithm class.}
 
-    \item \textbf{Hyperparameter Interface:} Enables the LLM to refine learning rate, discount factor, epsilon decay, and other parameters based on training feedback.
+    \item \blue{\textbf{Training Execution Interface:} The \texttt{objective()} method serves as Optuna's target function. It creates evaluation and training environments with the LLM-generated reward code, creates vectorized environments using \texttt{make\_vec\_env()} with \texttt{wrapper\_kwargs=\{"step\_code": self.step\_code\}}, instantiates the selected algorithm with trial-suggested hyperparameters, trains for 250,000 timesteps, and returns the best mean reward from evaluation.}
 
-    \item \textbf{DQN Architecture Interface:} Allows the LLM to propose neural network configurations tailored to specific environments.
+    \item \blue{\textbf{Hyperparameter Search Interface:} Optuna manages the hyperparameter search through its study object, storing trial results in a SQLite database. Each trial represents a complete training run with different hyperparameters. The search continues for a fixed number of trials (default: 10), and the best configuration is saved for final evaluation. \blue{The framework employs an AI sampler that enables the LLM to reason about hyperparameter choices based on previous trial outcomes, creating a more intelligent and adaptive optimization process.}}
 \end{enumerate}
 
-\subsection{Stage 1: Reward Algorithm Optimization}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\columnwidth]{figures/architecture_diagram.png}
+  \caption{\blue{System architecture showing how the LLM agent receives environment information, selects algorithms and designs rewards, which are then used by Stable-Baselines3 for training with AI Sampler optimization.}}
+  \label{fig:architecture}
+\end{figure}
+
+\subsection{Stage 1: Semantic Algorithm Selection}
 \label{subsec:stage1}
 
-In the first stage, we hold all Q-Learning parameters constant and allow the LLM to propose modifications to the reward calculation. Each environment implements a reward interface of the form:
+\blue{The first stage addresses the fundamental decision of which RL algorithm to employ. This stage is executed once before hyperparameter optimization begins.}
 
-\begin{equation}
-r_t = f(\text{action}_t, \text{observation}_t)
-\end{equation}
+\blue{The process begins with a natural language prompt listing available algorithms: A2C, DQN, PPO, SAC, and TD3. The LLM reasons about algorithm suitability based on its understanding of the task description. For discrete action spaces (as in LunarLander-v3), the LLM may recommend DQN for sample efficiency or PPO for stability. For continuous action spaces, it selects from SAC, TD3, or PPO based on the trade-off between sample efficiency and training stability.}
 
-where the action and observation at each timestep are serialized into a structured JSON message passed to the LLM. The model analyzes these variables and returns a Python-formatted reward expression emphasizing desired behaviors (e.g., maximizing ball deflection angles in Pingpong or minimizing brick misses in Arkanoid).
+\blue{The selection is executed through the \texttt{\_select\_algorithm} tool, which validates the algorithm name against the predefined dictionary and sets \texttt{self.algo} to the corresponding Stable-Baselines3 algorithm class. This class is then used to instantiate the model during training. This semantic selection process addresses the cold start problem in AutoRL, ensuring that hyperparameter optimization begins with a suitable algorithm.}
 
-After training with each generated reward function, we compare:
-\begin{itemize}
-    \item Total episode rewards,
-    \item Time to task completion, and
-    \item Reward curve stability.
-\end{itemize}
-
-This stage evaluates the LLM's capacity to design meaningful reward structures aligned with environment dynamics.
-
-\subsection{Stage 2: Hyperparameter Refinement}
+\subsection{Stage 2: Evolutionary Reward Function Design}
 \label{subsec:stage2}
 
-In the second stage, we fix the best reward formulation from Stage 1 and allow the LLM to optimize the agent's training parameters. The following Q-Learning hyperparameters are targeted for tuning:
+\blue{In the second stage, we leverage the LLM's code generation capabilities to design custom reward functions. The process begins by creating a temporary environment instance and wrapping it with \texttt{AgentModifiable} to extract environment information through \texttt{env\_info()}.}
+
+\blue{The \texttt{env\_info()} method returns a dictionary containing action space, observation space, specification metadata, and crucially, the source code of the \texttt{step} and \texttt{reset} methods obtained via \texttt{inspect.getsource()}. This information is formatted into a structured prompt that includes the natural language task description and the structured environment metadata.}
+
+\blue{The LLM analyzes the current reward implementation (visible in the source code) and the task objectives to generate Python code that defines a new \texttt{step} function. This function must call \texttt{self.env.step(action)} first to execute the original environment step, then extract relevant state variables, compute a shaped reward emphasizing desired behaviors (e.g., smooth landing, fuel efficiency), and return the modified reward along with the original observation and termination flags.}
+
+\blue{The generated code is passed to the \texttt{\_modify\_env\_step} tool, which stores it in \texttt{self.step\_code} for later application. The actual code execution occurs when environments are created during the hyperparameter optimization phase, ensuring consistent application across all trials. This approach demonstrates the LLM's capacity to translate semantic task understanding into executable reward code.}
+
+\subsection{Stage 3: Hyperparameter Optimization}
+\label{subsec:stage3}
+
+\blue{In the third stage, we fix the algorithm selection and reward function from previous stages and optimize hyperparameters using an AI-powered sampler. The hyperparameter search space is defined for policy gradient methods (PPO, A2C). \blue{We employ an AI sampler that leverages the LLM's reasoning capabilities to suggest hyperparameters based on trial history and training feedback, similar to the approach in AgentHPO. This AI sampler analyzes previous trial outcomes and intelligently guides the hyperparameter search process, enabling more efficient exploration of the hyperparameter space compared to traditional random or grid search methods.}}
 
 \begin{table}[h]
   \centering
   \small
-  \begin{tabular}{@{}p{2cm}p{2.5cm}p{1.8cm}@{}}
+  \begin{tabular}{p{2.2cm}p{3.2cm}p{2cm}}
     \toprule
     \textbf{Parameter} & \textbf{Description} & \textbf{Range} \\
     \midrule
-    Learning rate ($\alpha$) & Step size in update rule & [1e-5 -- 1e-2] \\
-    Discount factor ($\gamma$) & Future reward weight & [0.8 -- 0.99] \\
-    Epsilon decay & Exploration schedule & [0.90 -- 0.999] \\
-    Replay buffer size & Memory length & [1e4 -- 1e6] \\
+    \blue{Learning rate ($\alpha$)} & \blue{Step size in policy update} & \blue{[1e-5, 1e-2]} \\
+    \blue{Discount factor ($\gamma$)} & \blue{Future reward weight} & \blue{[0.9, 0.9999]} \\
+    \blue{Entropy coefficient} & \blue{Exploration vs. exploitation} & \blue{[0.0, 0.1]} \\
     \bottomrule
   \end{tabular}
-  \caption{Q-Learning hyperparameters.}
+  \caption{\blue{Hyperparameters optimized in our framework. Learning rate uses log scale. Additional fixed parameters include \texttt{n\_steps=4096} and \texttt{policy="MlpPolicy"}.}}
   \label{tab:hyperparams}
 \end{table}
 
-For DQN experiments, the LLM also adjusts:
-\begin{itemize}
-    \item Target network update interval,
-    \item Batch size, and
-    \item Gradient clipping threshold.
-\end{itemize}
+\blue{Each trial in the optimization study executes the \texttt{objective()} method, which receives hyperparameter suggestions from the AI sampler, creates evaluation and training environments with the LLM-generated reward code, sets up \texttt{EvalCallback} for periodic evaluation, creates vectorized training environments (4 parallel environments), instantiates the selected algorithm with AI-suggested hyperparameters, trains for 250,000 timesteps, and returns the best mean reward achieved during evaluation.}
 
-Each training run produces summary statistics---mean reward, variance, and average episode length---which are fed back to Claude 4.5. The model reasons over the results and generates refined parameter sets in subsequent iterations. This loop continues until convergence or until no significant improvement is observed.
+\blue{The optimization study stores trial results in a SQLite database (\texttt{db.sqlite3}), enabling persistence and analysis. The study runs for a fixed number of trials (default: 10) using an AI sampler that analyzes trial history and training metrics to intelligently suggest hyperparameters. The AI sampler leverages the LLM's reasoning capabilities to understand patterns in successful configurations and adaptively refine the search strategy. The best configuration discovered during the search is automatically saved by \texttt{EvalCallback} and can be loaded for final evaluation. This AI-powered sampling further enhances the end-to-end LLM-driven optimization pipeline.}
 
-\subsection{Stage 3: Model Architecture Generation}
-\label{subsec:stage3}
-
-The third stage explores whether an LLM can autonomously design neural architectures tailored to specific environments. Here, the LLM is given a textual summary of the observation dimensionality, action count, and reward distribution, then asked to propose a DQN architecture specifying:
-
-\begin{itemize}
-    \item Number of hidden layers
-    \item Units per layer
-    \item Activation functions
-    \item Optimizer type and learning schedule
-\end{itemize}
-
-The generated model description is output in JSON format and validated through a procedure to ensure it conforms to the parameters defined in the interface.
-
-We compare its performance against a baseline DQN (two-layer MLP, 256 hidden units, ReLU activation). Evaluation focuses on convergence time and stability under identical random seeds. A successful outcome is defined as equal or higher mean reward achieved in fewer episodes.
-
-\subsection{Expected Innovation and Feasibility}
+\subsection{Implementation Details and Technical Feasibility}
 \label{subsec:innovation}
 
-The proposed framework is \textbf{technically feasible} due to full Gymnasium compatibility and modular PyTorch integration. Its \textbf{innovation} lies in enabling a language model to reason over structured environment metadata and iteratively improve both reward design and learning configuration. By embedding semantic reasoning into the RL loop, LLM-RL-Tuner bridges human interpretability and autonomous optimization---an advancement toward more adaptive and generalizable reinforcement learning systems.
+\blue{The proposed framework is technically feasible due to several key design decisions:}
+
+\begin{itemize}
+    \item \blue{\textbf{Gymnasium Compatibility:} By implementing reward modification through a wrapper, we maintain full compatibility with standard Gymnasium environments without requiring source code modification.}
+
+    \item \blue{\textbf{Dynamic Code Execution:} The use of Python's \texttt{exec()} and \texttt{inspect} modules enables runtime code generation without recompilation. The \texttt{textwrap.dedent()} function ensures proper handling of indented code blocks.}
+
+    \item \blue{\textbf{Asynchronous LLM Interaction:} The Google ADK framework provides asynchronous session management through \texttt{InMemoryRunner}, enabling efficient handling of LLM event streams and automatic tool execution.}
+
+    \item \blue{\textbf{Vectorized Training:} The use of \texttt{make\_vec\_env()} with parallel environments (default: 4) significantly accelerates training by collecting experience simultaneously.}
+
+    \item \blue{\textbf{Extensible Optimization:} Integration with Optuna provides access to state-of-the-art optimization algorithms while maintaining flexibility for custom samplers.}
+\end{itemize}
+
+\blue{The innovation of this framework lies in unifying three traditionally isolated optimization stages into a single, reasoning-driven workflow. By providing the LLM with code-level access to environment implementations and enabling dynamic reward modification, we create a system that can reason about RL configuration decisions in the context of actual implementation details. The sequential pipeline design balances the benefits of LLM reasoning for high-level decisions with the efficiency of numerical optimization for continuous hyperparameter spaces.}
