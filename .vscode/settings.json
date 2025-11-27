@@ -1,0 +1,64 @@
+{
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "xelatex ➞ bibtex ➞ xelatex × 2",
+      "tools": [
+        "xelatex",
+        "bibtex",
+        "xelatex",
+        "xelatex"
+      ]
+    },
+    {
+      "name": "xelatex",
+      "tools": [
+        "xelatex"
+      ]
+    }
+  ],
+  "latex-workshop.latex.tools": [
+    {
+      "name": "xelatex",
+      "command": "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "bibtex",
+      "command": "/usr/local/texlive/2025/bin/universal-darwin/bibtex",
+      "args": [
+        "%DOCFILE%"
+      ]
+    }
+  ],
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  "latex-workshop.latex.clean.fileTypes": [
+    "*.aux",
+    "*.bbl",
+    "*.blg",
+    "*.idx",
+    "*.ind",
+    "*.lof",
+    "*.lot",
+    "*.out",
+    "*.toc",
+    "*.acn",
+    "*.acr",
+    "*.alg",
+    "*.glg",
+    "*.glo",
+    "*.gls",
+    "*.fls",
+    "*.log",
+    "*.fdb_latexmk",
+    "*.snm",
+    "*.synctex.gz",
+    "*.nav"
+  ],
+  "latex-workshop.view.pdf.viewer": "tab"
+}
+
